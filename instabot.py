@@ -5,7 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from time import sleep
 import config as cf
-import os,pickle,telebot, sys, easyocr
+import os,pickle,telebot, sys, easyocr, datetime
 
 tb = telebot.TeleBot(cf.telegram_key)
 reader = easyocr.Reader(['es', 'en'])
@@ -34,23 +34,26 @@ def login(driver):
             return
 
 def procesa_entrada(driver,entrada):
+    url=entrada.get_property('href')
     try:
-        procesados.index(entrada.get_property('href'))
+        procesados.index(url)
         return
     except:
         pass
-    print(entrada.get_property('href'))
+    print(url)
     imagen_url=entrada.find_element(By.TAG_NAME,'img').get_property('src')
     print(imagen_url)
+    driver.switch_to.new_window('tab')
     driver.get(imagen_url)
     driver.save_screenshot('img.png')
+    driver.close()
     result = reader.readtext('img.png')
     print(result)
     cadena=""
     for r in result:
         cadena+=f'<code>{r[-2]}</code>\n'
     cadena+='<a href="https://forocoches.com/codigo/">Enlace registro</a>'
-    procesados.append(entrada.get_property('href'))
+    procesados.append(url)
     with open('procesados.pkl', 'wb') as fp:
         pickle.dump(procesados, fp)
     tb.send_photo(cf.telegram_userid, imagen_url, caption=cadena, parse_mode='HTML')
@@ -63,12 +66,10 @@ def main():
     except:
         options.add_argument('--headless=new')
     loop=True
+    driver = webdriver.Chrome(options=options)
+    login(driver)
     while(loop):
         try:
-            driver = webdriver.Chrome(options=options)
-            # preproceso de la web
-            login(driver)
-
             for enlace in driver.find_elements(By.TAG_NAME, "a"):
                 try:
                     if (enlace.get_property('href').startswith('https://www.instagram.com/forocoches/p/')):
@@ -77,17 +78,21 @@ def main():
                 except Exception as e:
                     print(e)
                     pass
-            driver.quit()
         except:
             pass
         #si hay parametro 1 en linea de comandos se sale
         try:
             sys.argv.index('-1')
+            driver.quit()
             return
         except:
             pass
-        # esperar 30 segundos hasta siguiente ciclo
+        # esperar hasta siguiente ciclo
+        print(f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} Esperando {cf.espera_entre_ciclos} segundos hasta siguiente ciclo')
         sleep(cf.espera_entre_ciclos)
+        driver.refresh()
+        print(f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} Recargando la pagina')
+        sleep(5)
 
 
 if __name__ == '__main__':
